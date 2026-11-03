@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import stationeryHero from "./assets/stationery-hero.png";
 import productNotebook from "./assets/product-notebook.png";
 import productPens from "./assets/product-pens.png";
@@ -16,6 +16,7 @@ function App() {
   const [showSignup, setShowSignup] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [products, setProducts] = useState([]);
   const [checkoutForm, setCheckoutForm] = useState({
     fullName: "",
     email: "",
@@ -43,6 +44,18 @@ function App() {
     email: "",
     message: "",
   });
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/products")
+      .then((response) => response.json())
+      .then((data) => {
+        setProducts(data);
+      })
+      .catch((error) => {
+        console.error("Error fetching products:", error);
+      });
+  }, []);
+  console.log(products);
 
   const addToCart = (name, price) => {
     setOrderPlaced(false);
@@ -73,7 +86,13 @@ function App() {
 
         <div className="nav-actions">
           {isLoggedIn ? (
-            <button className="login-btn" onClick={() => setIsLoggedIn(false)}>
+            <button
+              className="login-btn"
+              onClick={() => {
+                setIsLoggedIn(false);
+                alert("Logged out successfully!");
+              }}
+            >
               Logout
             </button>
           ) : (
@@ -110,25 +129,38 @@ function App() {
           <h2 className="login-title">Login</h2>
 
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
 
               if (!loginForm.email || !loginForm.password) {
                 alert("Please enter email and password.");
                 return;
               }
-              if (
-                !registeredUser ||
-                loginForm.email !== registeredUser.email ||
-                loginForm.password !== registeredUser.password
-              ) {
-                alert("Invalid email or password.");
-                return;
-              }
+              try {
+                const response = await fetch("http://127.0.0.1:8000/login", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    email: loginForm.email,
+                    password: loginForm.password,
+                  }),
+                });
 
-              alert("Login successful!");
-              setIsLoggedIn(true);
-              setShowLogin(false);
+                const data = await response.json();
+
+                if (!response.ok) {
+                  alert(data.detail || "Login failed");
+                  return;
+                }
+
+                alert("Login successful!");
+                setIsLoggedIn(true);
+                setShowLogin(false);
+              } catch (error) {
+                alert("Cannot connect to server.");
+              }
             }}
           >
             <input
@@ -218,14 +250,34 @@ function App() {
                 alert("Passwords do not match.");
                 return;
               }
-              setRegisteredUser({
-                fullName: signupForm.fullName,
-                email: signupForm.email,
-                password: signupForm.password,
-              });
-              alert("Account created successfully!");
-              setShowSignup(false);
-              setShowLogin(true);
+              fetch("http://127.0.0.1:8000/signup", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  name: signupForm.fullName,
+                  email: signupForm.email,
+                  password: signupForm.password,
+                }),
+              })
+                .then(async (response) => {
+                  const data = await response.json();
+
+                  if (!response.ok) {
+                    throw new Error(data.detail || "Signup failed");
+                  }
+
+                  return data;
+                })
+                .then((data) => {
+                  alert("Account created successfully!");
+                  setShowSignup(false);
+                  setShowLogin(true);
+                })
+                .catch((error) => {
+                  alert(error.message);
+                });
             }}
           >
             Sign Up
@@ -374,7 +426,7 @@ function App() {
           />
           <button
             className="place-order-btn"
-            onClick={() => {
+            onClick={async () => {
               if (
                 !checkoutForm.fullName ||
                 !checkoutForm.email ||
@@ -384,6 +436,30 @@ function App() {
                 !checkoutForm.pinCode
               ) {
                 alert("Please fill in all fields.");
+                return;
+              }
+              const response = await fetch("http://127.0.0.1:8000/orders", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  customer_name: checkoutForm.fullName,
+                  email: checkoutForm.email,
+                  phone: checkoutForm.phone,
+                  address: checkoutForm.address,
+                  city: checkoutForm.city,
+                  pin_code: checkoutForm.pinCode,
+                  items: JSON.stringify(cart),
+                  total: cart.reduce(
+                    (sum, item) => sum + item.price * item.quantity,
+                    0,
+                  ),
+                }),
+              });
+
+              if (!response.ok) {
+                alert("Order failed. Please try again.");
                 return;
               }
 
@@ -479,102 +555,27 @@ function App() {
             <span>Everything you need to study, create and organize.</span>
           </div>
           <div className="products-grid">
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productNotebook} alt="Premium Notebook" />
+            {products.map((product) => (
+              <div className="product-card" key={product.id}>
+                <div className="product-image">
+                  <img
+                    src={`/src/assets/${product.image}`}
+                    alt={product.name}
+                  />
+                </div>
+
+                <h3>{product.name}</h3>
+                <p className="product-category">{product.category}</p>
+                <p className="product-price">₹{product.price}</p>
+
+                <button
+                  className="add-cart-btn"
+                  onClick={() => addToCart(product.name, product.price)}
+                >
+                  Add to Cart
+                </button>
               </div>
-
-              <h3>Premium Notebook</h3>
-              <p className="product-category">Notebooks</p>
-              <p className="product-price">₹499</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Premium Notebook", 499)}
-              >
-                Add to Cart
-              </button>
-            </div>
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productPens} alt="Pastel Pen Set" />
-              </div>
-
-              <h3>Pastel Pen Set</h3>
-              <p className="product-category">Pens</p>
-              <p className="product-price">₹149</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Pastel Pen Set", 149)}
-              >
-                Add to Cart
-              </button>
-            </div>
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productStickyNotes} alt="Sticky Notes" />
-              </div>
-
-              <h3>Sticky Notes</h3>
-              <p className="product-category">Sticky Notes</p>
-              <p className="product-price">₹99</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Sticky Notes", 99)}
-              >
-                Add to Cart
-              </button>
-            </div>
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productHighlighters} alt="Highlighter Set" />
-              </div>
-
-              <h3>Highlighter Set</h3>
-              <p className="product-category">Highlighters</p>
-              <p className="product-price">₹129</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Highlighter Set", 129)}
-              >
-                Add to Cart
-              </button>
-            </div>
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productOrganizer} alt="Desk Organizer" />
-              </div>
-
-              <h3>Desk Organizer</h3>
-              <p className="product-category">Organization</p>
-              <p className="product-price">₹179</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Desk Organizer", 179)}
-              >
-                Add to Cart
-              </button>
-            </div>
-            <div className="product-card">
-              <div className="product-image">
-                <img src={productJournal} alt="Daily Journal" />
-              </div>
-
-              <h3>Daily Journal</h3>
-              <p className="product-category">Journals</p>
-              <p className="product-price">₹159</p>
-
-              <button
-                className="add-cart-btn"
-                onClick={() => addToCart("Daily Journal", 159)}
-              >
-                Add to Cart
-              </button>
-            </div>
+            ))}
           </div>
         </section>
         <section className="categories-section" id="categories">
@@ -655,7 +656,7 @@ function App() {
           </div>
           <form
             className="contact-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
 
               if (
@@ -664,6 +665,23 @@ function App() {
                 !contactForm.message
               ) {
                 alert("Please fill in all fields.");
+                return;
+              }
+
+              const response = await fetch("http://127.0.0.1:8000/contact", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  name: contactForm.name,
+                  email: contactForm.email,
+                  message: contactForm.message,
+                }),
+              });
+
+              if (!response.ok) {
+                alert("Failed to send message. Please try again.");
                 return;
               }
 
